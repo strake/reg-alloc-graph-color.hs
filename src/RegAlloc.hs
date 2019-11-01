@@ -42,14 +42,15 @@ $(mkLens (dropWhile (== '_')) ''St)
 
 allocRegs :: (Traversable f) => RegCount -> f Operation -> Except Interferences (f Int)
 allocRegs deg insns = do
-    colors <- (allocRegs' deg ifm >=> colorize deg ifm) moves
+    colors <- (allocRegs' deg ifm >=> uncurry (colorize deg ifm)) moves
     for (count insns) \ (k, _) -> maybe (throwError ifm) pure $ colors IM.!? k
   where
     ifm = interferences insns'
     insns' = (\ case NonMove xs -> xs; Move x -> Nodes.fromList [x]) <$> insns
-    moves = UGr.insertEdges [(k', k :: Int) | (k, Move k') <- toList (count insns)] (UGr.empty deg)
+    moves =
+        UGr.insertEdges [(k', k :: Int) | (k, Move k') <- toList (count insns)] (UGr.empty deg)
 
-allocRegs' :: RegCount -> Interferences -> Moves -> Except Interferences [Op]
+allocRegs' :: RegCount -> Interferences -> Moves -> Except Interferences ([Op], Colors)
 allocRegs' deg ifm theMoves =
     execWriterT . flip evalStateT (St { _degree = 1, _ifs = ifm, _moves = theMoves }) $
     whileM (untilFixpointBy (==) (simplifyAndCoalescePhase >> freezePhase) >>
@@ -74,13 +75,15 @@ allocRegs' deg ifm theMoves =
     potentialSpillPhase = do
         k <- ML.zoom ifs potentialSpill
         deleteNode k
-        tell [Select k]
+        tell ([Select k], IM.empty)
     bumpDegree = compare deg <$> ML.gets degree >>= \ case
         GT -> True <$ ML.modify degree (+1)
         _  -> pure False
 
-colorize :: (MonadError Interferences m, Foldable t) => RegCount -> Interferences -> t Op -> m (IntMap Int)
-colorize deg ifm = flip execStateT IM.empty . traverse_ \ case
+colorize
+ :: (MonadError Interferences m, Foldable t)
+ => RegCount -> Interferences -> t Op -> Colors -> m Colors
+colorize deg ifm = execStateT . traverse_ \ case
     Select k -> do
         colors <- get
         let nbrs = ifm ! k
@@ -89,17 +92,11 @@ colorize deg ifm = flip execStateT IM.empty . traverse_ \ case
                    , Just c <- [case nbr of
                                     Node k -> colors IM.!? k
                                     Precolored c -> Just c]]
-        color <- case flip IS.notMember nbrColors `filter` [0..deg-1] of
-            color:_ -> pure color
-            _ -> throwError ifm
-        modify (IM.insert k color)
-    Coalesce k k' -> do
-        color <- case k' of
-            Node k -> gets (IM.!? k) >>= maybe (throwError ifm) pure
-            Precolored c -> pure c
-        modify (IM.insert k color)
+        go k $ find (`IS.notMember` nbrColors) [0..deg-1]
+    Coalesce k k' -> go k =<< gets (IM.!? k')
+  where go k = maybe (throwError ifm) (modify . IM.insert k)
 
-data Op = Select !Int | Coalesce !Int !Node
+data Op = Select !Int | Coalesce !Int !Int
   deriving (Show)
 
 deleteNode :: MonadState St m => Int -> m ()
@@ -108,13 +105,17 @@ deleteNode k = traverse_ ($ UGr.deleteNode k) [ML.modify ifs, ML.modify moves]
 deleteNodes :: MonadState St m => IntSet -> m ()
 deleteNodes ks = traverse_ ($ UGr.deleteNodes ks) [ML.modify ifs, ML.modify moves]
 
-coalesce1 :: (MonadState St m, MonadWriter [Op] m) => Node -> Int -> m ()
+coalesce1 :: (MonadState St m, MonadWriter ([Op], Colors) m) => Node -> Int -> m ()
 coalesce1 k' k = do
     traverse_ ($ UGr.coalesce k' k) [ML.modify ifs, ML.modify moves]
-    tell [Coalesce k k']
+    tell case k' of
+        Node k' -> ([Coalesce k k'], IM.empty)
+        Precolored c -> ([], IM.singleton k c)
 
-simplify :: (MonadState St m, MonadWriter [Op] m) => m ()
-simplify = concatMap IS.toList <$> untilFixpointBy (==) simplify1 >>= tell . fmap Select
+simplify :: (MonadState St m, MonadWriter ([Op], Colors) m) => m ()
+simplify =
+    concatMap IS.toList <$> untilFixpointBy (==) simplify1 >>=
+    tell . flip (,) IM.empty . fmap Select
 
 simplify1 :: MonadState St m => m IntSet
 simplify1 = do
@@ -168,3 +169,4 @@ potentialSpill = List.sortOn (Down . Nodes.size . snd) . If.toAscList <$> get >>
 data Operation = Move Node | NonMove Operands
 
 type RegCount = Int
+type Colors = IntMap Int

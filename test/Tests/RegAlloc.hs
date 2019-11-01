@@ -30,7 +30,7 @@ import RegAlloc.Nodes.Private
 
 test :: TestTree
 test = testProperty "allocRegs" \ Problem { regCount, ifs, moves } ->
-    case runExcept $ (allocRegs' regCount ifs >=> colorize regCount ifs) moves of
+    case runExcept $ (allocRegs' regCount ifs >=> uncurry (colorize regCount ifs)) moves of
         Left _ -> Right ""
         Right colors -> "" <$ runExcept do
             bool (throwE $ "bad register: " ++ show colors) (pure ()) $ all (< regCount) colors
