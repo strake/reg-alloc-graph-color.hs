@@ -30,9 +30,9 @@ import qualified RegAlloc.Nodes as Nodes
 import qualified RegAlloc.UGraph as UGr
 
 data St = St
-  { _degree :: Int
-  , _ifs :: Interferences
-  , _moves :: Moves
+  { _degree :: !Int
+  , _ifs :: !Interferences
+  , _moves :: !Moves
   }
   deriving (Eq, Show)
 
@@ -166,7 +166,7 @@ potentialSpill = List.sortOn (Down . Nodes.size . snd) . If.toAscList <$> get >>
     [] -> get >>= throwError
     (k, _):_ -> pure k
 
-data Operation = Move Node | NonMove Operands
+data Operation = Move !Node | NonMove !Operands
 
 type RegCount = Int
 type Colors = IntMap Int
