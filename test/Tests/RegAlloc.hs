@@ -13,12 +13,13 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
 import Data.Bool (bool)
 import qualified Data.Foldable.Unicode as Foldable
+import Data.Function (on)
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 
 import GHC.Generics
 
-import Test.SmallCheck.Series hiding (listSeries, (<~>))
+import Test.SmallCheck.Series hiding ((<~>))
 import Test.Tasty (TestTree)
 import Test.Tasty.SmallCheck
 
@@ -55,7 +56,8 @@ deriving instance Monad m => Serial m Parms
 ugrSeries :: Monad m => ReaderT Parms (Series m) UGraph
 ugrSeries = do
     Parms { nodeCount } <- ask
-    flip UGr.insertEdges (UGr.empty nodeCount) <$> mapReaderT listS edgeSeries
+    flip UGr.insertEdges (UGr.empty nodeCount) <$> mapReaderT (sortedListSBy p) edgeSeries
+  where p = (<) `on` \ (Node_ i, j) -> (i, j)
 
 edgeSeries :: Monad m => ReaderT Parms (Series m) (Node, Int)
 edgeSeries = do
@@ -69,9 +71,9 @@ nodeSeries = do
     Parms { regCount, nodeCount } <- ask
     lift $ Node_ <$> rangeS (-regCount, nodeCount)
 
-listS :: Monad m => Series m a -> Series m [a]
-listS as = ass where
-    ass = decDepth (pure []) `interleave` decDepth ((:) <$> as <~> ass)
+sortedListSBy :: Monad m => (a -> a -> Bool) -> Series m a -> Series m [a]
+sortedListSBy p as = decDepth (pure []) `interleave` decDepth (as >>- go) where
+    go a = (:) a <$> decDepth (pure [] `interleave` do b <- as; guard (p a b); go b)
 
 rangeS :: Monad m => (Int, Int) -> Series m Int
 rangeS (a, b) = do
