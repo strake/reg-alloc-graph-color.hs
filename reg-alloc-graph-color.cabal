@@ -1,6 +1,6 @@
-name:                reg-alloc
+name:                reg-alloc-graph-color
 version:             0.1.0.0
--- synopsis:
+synopsis:            Register allocation by graph colorization
 -- description:
 license:             MPL-2
 license-file:        LICENSE
@@ -103,7 +103,7 @@ benchmark bench
   main-is:             Main.hs
   build-depends:       base >=4.11 && <5
                      , criterion >=1.4.1
-                     , reg-alloc
+                     , reg-alloc-graph-color
   default-language:    Haskell2010
   default-extensions:  UnicodeSyntax
                      , LambdaCase
@@ -128,4 +128,4 @@ benchmark bench
 
 source-repository head
   type:     git
-  location: https://github.com/strake/reg-alloc.hs
+  location: https://github.com/strake/reg-alloc-graph-color.hs
