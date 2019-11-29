@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingVia #-}
 module RegAlloc.UGraph.Private where
 
 import Prelude hiding (null)
@@ -16,6 +17,7 @@ import RegAlloc.Nodes.Private
 
 newtype UGraph = UGr { unUGr :: Union IntMap IntSet }
   deriving (Eq, Show)
+  deriving (Semigroup, Monoid) via (Union IntMap IntSet)
 
 null, nullEdges :: UGraph -> Bool
 null = Foldable.null . unUGr

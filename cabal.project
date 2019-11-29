@@ -1,0 +1,6 @@
+packages: .
+
+source-repository-package
+    type: git
+    location: https://github.com/strake/hoopl.hs
+    tag: 94831461b067a58fa36c4ac5b78e8b97267bd06d
