@@ -5,11 +5,9 @@ module RegAlloc (Operation (..), RegCount, allocRegs, allocRegs', colorize) wher
 import Prelude hiding (id, (.))
 import Control.Applicative
 import Control.Category
-import Control.Lens.TH (mkLens)
 import Control.Monad (guard, join)
 import Control.Monad.Except
 import Control.Monad.State
-import qualified Control.Monad.State.Lens as ML
 import Control.Monad.Writer
 import Data.Bool (bool)
 import Data.Foldable (find, toList, traverse_)
@@ -22,6 +20,7 @@ import Data.Ord (Down (..))
 import Data.Peano
 import Data.Traversable (for)
 import qualified Lens.Micro.Mtl as ML
+import Lens.Micro.TH (makeLenses)
 import Util hiding ((∈))
 
 import RegAlloc.Interference (Interferences, Node (..), Operands, UGraph, interferences, interferes, (!), (∈))
@@ -38,7 +37,7 @@ data St = St
 
 type Moves = UGraph
 
-$(mkLens (dropWhile (== '_')) ''St)
+$(makeLenses ''St)
 
 allocRegs :: (Traversable f) => RegCount -> f Operation -> Except Interferences (f Int)
 allocRegs deg insns = do
@@ -54,7 +53,7 @@ allocRegs' :: RegCount -> Interferences -> Moves -> Except Interferences ([Op], 
 allocRegs' deg ifm theMoves =
     execWriterT . flip evalStateT (St { _degree = 1, _ifs = ifm, _moves = theMoves }) $
     whileM (untilFixpointBy (==) (simplifyAndCoalescePhase >> freezePhase) >>
-            not . If.null <$> ML.gets ifs) potentialSpillPhase
+            not . If.null <$> ML.use ifs) potentialSpillPhase
   where
     simplifyAndCoalescePhase = doWhileM bumpDegree do
         St { _degree = deg } <- get
@@ -71,13 +70,13 @@ allocRegs' deg ifm theMoves =
                 , not $ If.interferes k' k theIfs
                 , Nodes.size (theIfs ! k) < deg] of
             [] -> pure ()
-            k:_ -> () <$ ML.puts moves (UGr.deleteNode k theMoves)
+            k:_ -> () <$ ML.assign moves (UGr.deleteNode k theMoves)
     potentialSpillPhase = do
         k <- ML.zoom ifs potentialSpill
         deleteNode k
         tell ([Select k], IM.empty)
-    bumpDegree = compare deg <$> ML.gets degree >>= \ case
-        GT -> True <$ ML.modify degree (+1)
+    bumpDegree = compare deg <$> ML.use degree >>= \ case
+        GT -> True <$ ML.modifying degree (+1)
         _  -> pure False
 
 colorize
@@ -100,14 +99,14 @@ data Op = Select !Int | Coalesce !Int !Int
   deriving (Show)
 
 deleteNode :: MonadState St m => Int -> m ()
-deleteNode k = traverse_ ($ UGr.deleteNode k) [ML.modify ifs, ML.modify moves]
+deleteNode k = traverse_ ($ UGr.deleteNode k) [ML.modifying ifs, ML.modifying moves]
 
 deleteNodes :: MonadState St m => IntSet -> m ()
-deleteNodes ks = traverse_ ($ UGr.deleteNodes ks) [ML.modify ifs, ML.modify moves]
+deleteNodes ks = traverse_ ($ UGr.deleteNodes ks) [ML.modifying ifs, ML.modifying moves]
 
 coalesce1 :: (MonadState St m, MonadWriter ([Op], Colors) m) => Node -> Int -> m ()
 coalesce1 k' k = do
-    traverse_ ($ UGr.coalesce k' k) [ML.modify ifs, ML.modify moves]
+    traverse_ ($ UGr.coalesce k' k) [ML.modifying ifs, ML.modifying moves]
     tell case k' of
         Node k' -> ([Coalesce k k'], IM.empty)
         Precolored c -> ([], IM.singleton k c)

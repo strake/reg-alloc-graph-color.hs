@@ -55,9 +55,7 @@ library private
                      , base >= 4.8 && < 5
                      , base-unicode-symbols >= 0.2 && < 0.3
                      , containers >= 0.5 && < 0.7
-                     , lenz >= 0.4 && < 0.5
-                     , lenz-mtl >= 0.1 && < 0.2
-                     , lenz-template
+                     , microlens-th >= 0.2 && < 0.5
                      , microlens-mtl >= 0.2 && < 0.3
                      , mtl >= 2.0 && < 2.3
                      , peano >= 0.1 && < 0.2
