@@ -80,8 +80,8 @@ allocRegs' deg ifm theMoves =
         _  -> pure False
 
 colorize
- :: (MonadError Interferences m, Foldable t)
- => RegCount -> Interferences -> t Op -> Colors -> m Colors
+ :: Foldable t
+ => RegCount -> Interferences -> t Op -> Colors -> Except Interferences Colors
 colorize deg ifm = execStateT . traverse_ \ case
     Select k -> do
         colors <- get
