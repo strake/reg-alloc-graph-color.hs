@@ -27,7 +27,7 @@ import RegAlloc
 import RegAlloc.Interference as If
 import RegAlloc.UGraph as UGr
 import RegAlloc.Nodes as Nodes
-import RegAlloc.Nodes.Private
+import RegAlloc.Types.Private
 
 test :: TestTree
 test = testProperty "allocRegs" \ Problem { regCount, ifs, moves } ->

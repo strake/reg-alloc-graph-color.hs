@@ -48,9 +48,8 @@ library private
   exposed-modules:     RegAlloc
                      , RegAlloc.Interference
                      , RegAlloc.Nodes
-                     , RegAlloc.Nodes.Private
+                     , RegAlloc.Types.Private
                      , RegAlloc.UGraph
-                     , RegAlloc.UGraph.Private
   build-depends:       Map
                      , base >= 4.8 && < 5
                      , base-unicode-symbols >= 0.2 && < 0.3

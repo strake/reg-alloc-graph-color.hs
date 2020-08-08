@@ -8,9 +8,8 @@ import Data.IntSet (IntSet)
 import qualified Data.IntSet as IS
 import Util hiding ((∈))
 
-import RegAlloc.Nodes.Private
+import RegAlloc.Types.Private (Nodes (..), UGraph (..))
 import RegAlloc.UGraph
-import RegAlloc.UGraph.Private
 
 type Interferences = UGraph
 

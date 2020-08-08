@@ -6,7 +6,7 @@ import Control.Monad (guard)
 import Data.Bits (complement)
 import qualified Data.IntSet as IS
 
-import RegAlloc.Nodes.Private
+import RegAlloc.Types.Private (Nodes (..), Node (..))
 
 pattern Precolored :: Int -> Node
 pattern Precolored n <- Node_ (\ n -> complement n <$ guard (n < 0) -> Just n)
