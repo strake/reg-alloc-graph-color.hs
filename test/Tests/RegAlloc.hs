@@ -1,27 +1,33 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module Tests.RegAlloc where
 
+import Control.Applicative
 import Control.Monad ((>=>), guard)
-import Control.Monad.Logic.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
 import Data.Bool (bool)
+import Data.Coerce (coerce)
+import Data.Either (isRight)
+import Data.Filtrable (nub)
 import qualified Data.Foldable.Unicode as Foldable
-import Data.Function (on)
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 
 import GHC.Generics
 
-import Test.SmallCheck.Series hiding ((<~>))
+import Test.LeanCheck.Generic
+import Test.LeanCheck.Utils.Types (Nat (..))
 import Test.Tasty (TestTree)
-import Test.Tasty.SmallCheck
+import Test.Tasty.LeanCheck
 
 import RegAlloc
 import RegAlloc.Interference as If
@@ -30,7 +36,7 @@ import RegAlloc.Nodes as Nodes
 import RegAlloc.Types.Private
 
 test :: TestTree
-test = testProperty "allocRegs" \ Problem { regCount, ifs, moves } ->
+test = testProperty "allocRegs" \ Problem { regCount, ifs, moves } -> isRight $
     case runExcept $ (allocRegs' regCount ifs >=> uncurry (colorize regCount ifs)) moves of
         Left _ -> Right ""
         Right colors -> "" <$ runExcept do
@@ -44,42 +50,59 @@ data Problem = Problem
   { regCount, nodeCount :: !Int, ifs :: !Interferences, moves :: !UGraph }
   deriving (Eq, Show, Generic)
 
-instance Monad m => Serial m Problem where
-    series = series >>- \ parms@Parms { regCount, nodeCount } -> flip runReaderT parms $
-        [Problem {..} | (ifs, moves) <- (,) <$> ugrSeries <~> ugrSeries]
+newtype Tiers a = Tiers { unTiers :: [[a]] }
+  deriving (Foldable, Functor, Traversable)
+
+instance Applicative Tiers where
+    pure = Tiers . cons0
+    liftA2 = coerce . productWith
+
+instance Alternative Tiers where
+    empty = Tiers (pure [])
+
+    (<|>) :: ∀ a . Tiers a -> Tiers a -> Tiers a
+    (<|>) = coerce ((\/) :: [[a]] -> _)
+
+instance Monad Tiers where
+    (>>=) :: ∀ a b . Tiers a -> (a -> Tiers b) -> Tiers b
+    (>>=) = flip (coerce (concatMapT :: _ -> [[a]] -> [[b]]))
+
+mapTiers :: ([[a]] -> [[b]]) -> Tiers a -> Tiers b
+mapTiers = coerce
+
+instance Listable Problem where
+    tiers = unTiers do
+        parms@Parms { regCount, nodeCount } <- Tiers tiers
+        flip runReaderT parms $ [Problem {..} | (ifs, moves) <- (,) <$> ugrTiers <*> ugrTiers]
 
 data Parms = Parms
   { regCount, nodeCount :: !Int }
   deriving (Eq, Show, Generic)
-deriving instance Monad m => Serial m Parms
 
-ugrSeries :: Monad m => ReaderT Parms (Series m) UGraph
-ugrSeries = do
+instance Listable Parms where
+    tiers = genericTiers
+
+ugrTiers :: ReaderT Parms Tiers UGraph
+ugrTiers = do
     Parms { nodeCount } <- ask
-    flip UGr.insertEdges (UGr.empty nodeCount) <$> mapReaderT (sortedListSBy p) edgeSeries
-  where p = (<) `on` \ (Node_ i, j) -> (i, j)
+    let checkUniq as
+            | as == nub as = as
+            | otherwise = error "bad set"
+    flip UGr.insertEdges (UGr.empty nodeCount) . checkUniq <$> (mapReaderT . mapTiers) setsOf edgeTiers
 
-edgeSeries :: Monad m => ReaderT Parms (Series m) (Node, Int)
-edgeSeries = do
+edgeTiers :: ReaderT Parms Tiers (Node, Int)
+edgeTiers = do
     Parms { nodeCount } <- ask
-    k' <- nodeSeries
-    lift $ getNonNegative <$> series >>- \ k ->
-           (k', k) <$ guard (unNode_ k' < k && k < nodeCount)
+    k' <- nodeTiers
+    lift $ unNat <$> Tiers tiers >>= \ k -> (k', k) <$ guard (unNode_ k' < k && k < nodeCount)
 
-nodeSeries :: Monad m => ReaderT Parms (Series m) Node
-nodeSeries = do
+nodeTiers :: ReaderT Parms Tiers Node
+nodeTiers = do
     Parms { regCount, nodeCount } <- ask
-    lift $ Node_ <$> rangeS (-regCount, nodeCount)
+    lift $ Node_ <$> rangeTiers (-regCount, nodeCount)
 
-sortedListSBy :: Monad m => (a -> a -> Bool) -> Series m a -> Series m [a]
-sortedListSBy p as = decDepth (pure []) `interleave` decDepth (as >>- go) where
-    go a = (:) a <$> decDepth (pure [] `interleave` do b <- as; guard (p a b); go b)
+rangeTiers :: (Integral a) => (a, a) -> Tiers a
+rangeTiers = Tiers . toTiers . rangeList
 
-rangeS :: Monad m => (Int, Int) -> Series m Int
-rangeS (a, b) = do
-    k <- series
-    k <$ guard (k >= a && k < b)
-
-infixl 4 <~>
-(<~>) :: MonadLogic m => m (a -> b) -> m a -> m b
-a <~> b = a >>- (<$> b)
+rangeList :: (Integral a) => (a, a) -> [a]
+rangeList (a, b) = [0..b-1] +| [-1,-2..a]

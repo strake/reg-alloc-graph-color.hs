@@ -70,10 +70,10 @@ test-suite test
   build-depends:       base >=4.11 && <5
                      , base-unicode-symbols
                      , containers
-                     , logict
-                     , smallcheck >=1.1.4
+                     , filtrable
+                     , leancheck >=0.9.3
                      , tasty >=1.0
-                     , tasty-smallcheck >=0.8
+                     , tasty-leancheck >=0.0.1
                      , transformers
                      , util
                      , private
