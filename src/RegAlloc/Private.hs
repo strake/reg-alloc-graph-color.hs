@@ -39,7 +39,12 @@ type Moves = UGraph
 
 $(makeLenses ''St)
 
-allocRegs :: (Traversable f, Foldable g) => g reg -> f Operation -> Except Interferences (f reg)
+-- | Allocate registers for each instruction.
+allocRegs
+ :: (Traversable f, Foldable g)
+ => g reg -- ^ Set of allocable registers
+ -> f Operation -- ^ Sequence of instructions
+ -> Except Interferences (f reg) -- ^ Allocation
 allocRegs regs insns = do
     colors <- allocRegsHelper (length regs) ifm moves
     for (count insns) \ (k, _) -> maybe (throwError ifm) (pure . (toList regs !!)) $ colors IM.!? k
@@ -164,6 +169,7 @@ george n a b ifm = flip all (Nodes.toList (ifm ! b)) \ case
         Precolored _ -> Nothing
         Node a -> Just (ifm ! a)
 
+-- Choose the node of least degree to potentially spill.
 potentialSpill :: Interferences -> Maybe Int
 potentialSpill = If.toAscList & List.sortOn (Down . Nodes.size . snd) & \ case
     [] -> Nothing
