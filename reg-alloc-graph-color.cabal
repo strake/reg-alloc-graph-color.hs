@@ -37,17 +37,17 @@ common c
 
 library
   import:              c
-  hs-source-dirs:      src
-  reexported-modules:  RegAlloc
+  hs-source-dirs:      src-public
+  exposed-modules:     RegAlloc
   build-depends:       private
   default-language:    Haskell2010
 
 library private
   import:              c
   hs-source-dirs:      src
-  exposed-modules:     RegAlloc
-                     , RegAlloc.Interference
+  exposed-modules:     RegAlloc.Interference
                      , RegAlloc.Nodes
+                     , RegAlloc.Private
                      , RegAlloc.Types.Private
                      , RegAlloc.UGraph
   build-depends:       Map

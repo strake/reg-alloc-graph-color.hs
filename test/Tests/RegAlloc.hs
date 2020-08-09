@@ -10,7 +10,7 @@
 module Tests.RegAlloc where
 
 import Control.Applicative
-import Control.Monad ((>=>), guard)
+import Control.Monad (guard)
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
@@ -29,15 +29,15 @@ import Test.LeanCheck.Utils.Types (Nat (..))
 import Test.Tasty (TestTree)
 import Test.Tasty.LeanCheck
 
-import RegAlloc
 import RegAlloc.Interference as If
 import RegAlloc.UGraph as UGr
 import RegAlloc.Nodes as Nodes
+import RegAlloc.Private
 import RegAlloc.Types.Private
 
 test :: TestTree
 test = testProperty "allocRegs" \ Problem { regCount, ifs, moves } -> isRight $
-    case runExcept $ (allocRegs' regCount ifs >=> uncurry (colorize regCount ifs)) moves of
+    case runExcept $ allocRegsHelper regCount ifs moves of
         Left _ -> Right ""
         Right colors -> "" <$ runExcept do
             bool (throwE $ "bad register: " ++ show colors) (pure ()) $ all (< regCount) colors

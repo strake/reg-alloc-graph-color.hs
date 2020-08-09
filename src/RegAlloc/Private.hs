@@ -1,6 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
-module RegAlloc (Operation (..), RegCount, allocRegs, allocRegs', colorize) where
+module RegAlloc.Private (Operation (..), RegCount, allocRegs, allocRegsHelper) where
 
 import Prelude hiding (id, (.))
 import Control.Applicative
@@ -41,13 +40,16 @@ $(makeLenses ''St)
 
 allocRegs :: (Traversable f) => RegCount -> f Operation -> Except Interferences (f Int)
 allocRegs deg insns = do
-    colors <- (allocRegs' deg ifm >=> uncurry (colorize deg ifm)) moves
+    colors <- allocRegsHelper deg ifm moves
     for (count insns) \ (k, _) -> maybe (throwError ifm) pure $ colors IM.!? k
   where
     ifm = interferences insns'
     insns' = (\ case NonMove xs -> xs; Move x -> Nodes.fromList [x]) <$> insns
     moves =
         UGr.insertEdges [(k', k :: Int) | (k, Move k') <- toList (count insns)] (UGr.empty deg)
+
+allocRegsHelper :: RegCount -> Interferences -> Moves -> Except Interferences Colors
+allocRegsHelper deg ifm = allocRegs' deg ifm >=> uncurry (colorize deg ifm)
 
 allocRegs' :: RegCount -> Interferences -> Moves -> Except Interferences ([Op], Colors)
 allocRegs' deg ifm theMoves =
