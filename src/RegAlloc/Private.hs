@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RegAlloc.Private (Operation (..), RegCount, allocRegs, allocRegsHelper) where
 
 import Prelude hiding (id, (.))
@@ -54,8 +55,10 @@ allocRegsHelper deg ifm = allocRegs' deg ifm >=> uncurry (colorize deg ifm)
 allocRegs' :: RegCount -> Interferences -> Moves -> Except Interferences ([Op], Colors)
 allocRegs' deg ifm theMoves =
     execWriterT . flip evalStateT (St { _degree = 1, _ifs = ifm, _moves = theMoves }) $
-    whileM (untilFixpointBy (==) (simplifyAndCoalescePhase >> freezePhase) >>
-            not . If.null <$> ML.use ifs) potentialSpillPhase
+    whileJust_ (untilFixpointBy (==) (simplifyAndCoalescePhase >> freezePhase) >> potentialSpill <$> ML.use ifs) \ k -> do
+        -- Spill
+        deleteNode k
+        tell ([Select k], IM.empty)
   where
     simplifyAndCoalescePhase = doWhileM bumpDegree do
         St { _degree = deg } <- get
@@ -73,10 +76,6 @@ allocRegs' deg ifm theMoves =
                 , Nodes.size (theIfs ! k) < deg] of
             [] -> pure ()
             k:_ -> () <$ ML.assign moves (UGr.deleteNode k theMoves)
-    potentialSpillPhase = do
-        k <- ML.zoom ifs potentialSpill
-        deleteNode k
-        tell ([Select k], IM.empty)
     bumpDegree = compare deg <$> ML.use degree >>= \ case
         GT -> True <$ ML.modifying degree (+1)
         _  -> pure False
@@ -135,6 +134,9 @@ untilFixpointBy eq x = go [] where
         t <- get
         bool (go . (a:)) pure (eq s t) as
 
+whileJust_ :: Monad m => m (Maybe a) -> (a -> m b) -> m ()
+whileJust_ x f = () <$ (whileJust x f :: _ [_])
+
 whileM :: Monad m => m Bool -> m a -> m [a]
 whileM = compose2 whileJust (fmap guard) pure
 
@@ -162,10 +164,10 @@ george n a b ifm = flip all (Nodes.toList (ifm ! b)) \ case
         Precolored _ -> Nothing
         Node a -> Just (ifm ! a)
 
-potentialSpill :: (MonadState Interferences m, MonadError Interferences m) => m Int
-potentialSpill = List.sortOn (Down . Nodes.size . snd) . If.toAscList <$> get >>= \ case
-    [] -> get >>= throwError
-    (k, _):_ -> pure k
+potentialSpill :: Interferences -> Maybe Int
+potentialSpill = If.toAscList & List.sortOn (Down . Nodes.size . snd) & \ case
+    [] -> Nothing
+    (k, _):_ -> Just k
 
 data Operation = Move !Node | NonMove !Operands
 
