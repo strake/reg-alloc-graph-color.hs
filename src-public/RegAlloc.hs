@@ -1,4 +1,4 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module RegAlloc (Operation (..), RegCount, allocRegs) where
+module RegAlloc (Operation (..), allocRegs) where
 
 import RegAlloc.Private

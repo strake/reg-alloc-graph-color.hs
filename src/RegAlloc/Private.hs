@@ -39,15 +39,15 @@ type Moves = UGraph
 
 $(makeLenses ''St)
 
-allocRegs :: (Traversable f) => RegCount -> f Operation -> Except Interferences (f Int)
-allocRegs deg insns = do
-    colors <- allocRegsHelper deg ifm moves
-    for (count insns) \ (k, _) -> maybe (throwError ifm) pure $ colors IM.!? k
+allocRegs :: (Traversable f, Foldable g) => g reg -> f Operation -> Except Interferences (f reg)
+allocRegs regs insns = do
+    colors <- allocRegsHelper (length regs) ifm moves
+    for (count insns) \ (k, _) -> maybe (throwError ifm) (pure . (toList regs !!)) $ colors IM.!? k
   where
     ifm = interferences insns'
     insns' = (\ case NonMove xs -> xs; Move x -> Nodes.fromList [x]) <$> insns
     moves =
-        UGr.insertEdges [(k', k :: Int) | (k, Move k') <- toList (count insns)] (UGr.empty deg)
+        UGr.insertEdges [(k', k :: Int) | (k, Move k') <- toList (count insns)] (UGr.empty (length regs))
 
 allocRegsHelper :: RegCount -> Interferences -> Moves -> Except Interferences Colors
 allocRegsHelper deg ifm = allocRegs' deg ifm >=> uncurry (colorize deg ifm)
